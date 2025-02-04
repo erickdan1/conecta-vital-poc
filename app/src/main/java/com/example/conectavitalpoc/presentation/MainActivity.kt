@@ -6,11 +6,13 @@
 
 package com.example.conectavitalpoc.presentation
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -19,7 +21,10 @@ import android.util.Log
 import android.widget.Button
 import android.widget.Switch
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.health.services.client.HealthServices
 import androidx.health.services.client.PassiveMonitoringClient
@@ -28,6 +33,7 @@ import androidx.lifecycle.lifecycleScope
 import com.example.conectavitalpoc.R
 import kotlinx.coroutines.launch
 import androidx.concurrent.futures.await
+import androidx.core.content.ContextCompat
 import androidx.health.services.client.MeasureCallback
 import androidx.health.services.client.MeasureClient
 import androidx.health.services.client.data.PassiveListenerConfig
@@ -58,11 +64,32 @@ class MainActivity : ComponentActivity() {
     private var isPassiveMonitoringEnabled = false
     private var isMeasuring = false
 
+    // Launcher para solicitar a permissão BODY_SENSORS em tempo de execução
+    private val bodySensorsPermissionLauncher: ActivityResultLauncher<String> =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
+            if (isGranted) {
+                Log.d("Permissions", "BODY_SENSORS permission granted.")
+            } else {
+                Toast.makeText(
+                    this,
+                    "Permissão BODY_SENSORS é necessária para capturar os dados dos sensores.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // Configuração inicial da interface
         setContentView(R.layout.activity_main)
+
+        // Solicita a permissão BODY_SENSORS, se ainda não concedida
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            bodySensorsPermissionLauncher.launch(Manifest.permission.BODY_SENSORS)
+        }
 
         // Obtém as referências para os elementos de interface
         heartRateTextView = findViewById(R.id.heartRateTextView)
@@ -103,6 +130,7 @@ class MainActivity : ComponentActivity() {
             // Verifica se o dispositivo suporta monitoramento passivo de ritmo cardíaco
             val capabilitiesTask = passiveMonitoringClient.getCapabilitiesAsync()
             val capabilities = capabilitiesTask.await()
+            Log.d("Debug", "Capacidades recebidas: $capabilities")
             if (DataType.HEART_RATE_BPM !in capabilities.supportedDataTypesPassiveMonitoring) {
                 Log.w("PassiveMonitoring", "Monitoramento passivo de frequência cardíaca não suportado.")
                 heartRateTextView.text = "Monitoramento de ritmo cardíaco não suportado neste dispositivo."
@@ -140,7 +168,7 @@ class MainActivity : ComponentActivity() {
     private var measureCallback: MeasureCallback? = null
 
     // Flag para alternar entre simulação e medição real
-    private val isSimulationMode = true
+    private val isSimulationMode = false
 
     // Handler e Runnable para simulação
     private val handler = Handler(Looper.getMainLooper())
