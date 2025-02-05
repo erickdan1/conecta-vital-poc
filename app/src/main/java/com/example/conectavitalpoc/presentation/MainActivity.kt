@@ -15,8 +15,6 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.widget.Button
 import android.widget.Switch
@@ -46,23 +44,21 @@ import androidx.health.services.client.unregisterMeasureCallback
 
 class MainActivity : ComponentActivity() {
 
-    // Declaração do cliente para monitoramento passivo
+    // Declaração do cliente para monitoramento passivo e medição em tempo real
     private lateinit var passiveMonitoringClient: PassiveMonitoringClient
-
-    // Declaração do cliente para medição em tempo real
     private lateinit var measureClient: MeasureClient
 
-    // TextView para exibir os dados do ritmo cardíaco
+    // Elementos da interface
     private lateinit var heartRateTextView: TextView
-
-    // Switch para ativar/desativar monitoramento passivo
     private lateinit var passiveMonitoringToggle: Switch
-
-    // Button para iniciar/parar a medição em tempo real
     private lateinit var measureButton: Button
 
+    // Estados
     private var isPassiveMonitoringEnabled = false
     private var isMeasuring = false
+
+    // Declaração de uma variável para armazenar o callback
+    private var measureCallback: MeasureCallback? = null
 
     // Launcher para solicitar a permissão BODY_SENSORS em tempo de execução
     private val bodySensorsPermissionLauncher: ActivityResultLauncher<String> =
@@ -164,37 +160,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // Declaração de uma variável para armazenar o callback
-    private var measureCallback: MeasureCallback? = null
-
-    // Flag para alternar entre simulação e medição real
-    private val isSimulationMode = false
-
-    // Handler e Runnable para simulação
-    private val handler = Handler(Looper.getMainLooper())
-    private val simulationRunnable = object : Runnable {
-        @SuppressLint("SetTextI18n")
-        override fun run() {
-            val syntheticHeartRate = (60..100).random() // Gera valor aleatório
-            Log.d("Simulation", "Simulação: Ritmo cardíaco gerado: $syntheticHeartRate BPM")
-            heartRateTextView.text = "Simulação: Ritmo cardíaco: $syntheticHeartRate BPM"
-            handler.postDelayed(this, 1000) // Repete a cada 1 segundo
-        }
-    }
-
     @SuppressLint("SetTextI18n")
     private fun startRealTimeMeasurement() {
         lifecycleScope.launch {
             try {
-                if (isSimulationMode) {
-                    // Inicia a simulação
-                    handler.post(simulationRunnable)
-                    isMeasuring = true
-                    measureButton.text = "Parar Medição"
-                    Log.d("Simulation", "Modo de simulação iniciado.")
-                    return@launch
-                }
-
                 // Verifica as capacidades do dispositivo (apenas para medição real)
                 val capabilities = measureClient.getCapabilitiesAsync().await()
                 if (DataType.HEART_RATE_BPM !in capabilities.supportedDataTypesMeasure) {
@@ -243,20 +212,14 @@ class MainActivity : ComponentActivity() {
     private fun stopRealTimeMeasurement() {
         lifecycleScope.launch {
             try {
-                if (isSimulationMode) {
-                    // Para a simulação
-                    handler.removeCallbacks(simulationRunnable)
-                    // heartRateTextView.text = "Simulação parada."
-                    Log.d("Simulation", "Modo de simulação parado.")
-                } else {
-                    // Desregistra o callback de medição real
-                    measureCallback?.let {
-                        measureClient.unregisterMeasureCallback(DataType.HEART_RATE_BPM, it)
-                    }
-                    measureCallback = null // Libera a variável
-                    // heartRateTextView.text = "Medição em tempo real parada."
-                    Log.d("RealTimeMeasurement", "Medição em tempo real parada.")
+                // Desregistra o callback de medição real
+                measureCallback?.let {
+                    measureClient.unregisterMeasureCallback(DataType.HEART_RATE_BPM, it)
                 }
+                measureCallback = null // Libera a variável
+                // heartRateTextView.text = "Medição em tempo real parada."
+                Log.d("RealTimeMeasurement", "Medição em tempo real parada.")
+
             } catch (e: Exception) {
                 Log.e("RealTimeMeasurement", "Erro ao parar medição: ${e.message}")
             } finally {
